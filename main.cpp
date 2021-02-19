@@ -11,6 +11,10 @@ const std::vector<const char *> __validationLyrs {
     "VK_LAYER_KHRONOS_validation"
 };
 
+const std::vector<const char *> __deviceExts {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
 VkResult CreateDebugUtilsMessengerEXT(VkInstance _instance,
     const VkDebugUtilsMessengerCreateInfoEXT * _createInfo,
     const VkAllocationCallbacks * _allocator,
@@ -42,6 +46,12 @@ struct QueueFamilyIndices {
     bool isComplete() noexcept {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
+};
+
+struct SwapChainSupportDetails {
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
 };
 
 class VkProgram {
@@ -77,6 +87,11 @@ private:
     VkQueue graphicsQueue_;
     VkQueue presentQueue_;
 
+    VkSwapchainKHR swapChain_;
+    std::vector<VkImage> swapChainImages_;
+    VkFormat swapChainImageFormat_;
+    VkExtent2D swapChainExtent_;
+
     void initWindow() {
         glfwInit();
 
@@ -94,6 +109,7 @@ private:
         createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
+        createSwapChain();
     }
 
     void mainLoop() {
@@ -103,7 +119,9 @@ private:
     }
 
     void cleanup() {
+        vkDestroySwapchainKHR(device_, swapChain_, nullptr);
         vkDestroyDevice(device_, nullptr);
+
 #ifndef NDEBUG
         DestroyDebugUtilsMessengerEXT(instance_, dbgMessenger_, nullptr);
 #endif
@@ -242,7 +260,9 @@ private:
             .pQueueCreateInfos = queueCreateInfos.data(),
 
             .pEnabledFeatures = &deviceFeatures,
-            .enabledExtensionCount = 0
+
+            .enabledExtensionCount = static_cast<uint32_t>(__deviceExts.size()),
+            .ppEnabledExtensionNames = __deviceExts.data()
         };
 
 #ifndef NDEBUG
@@ -259,10 +279,146 @@ private:
         vkGetDeviceQueue(device_, indices.presentFamily.value(), 0, &presentQueue_);
     }
 
+    void createSwapChain() {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice_);
+
+        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+        VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+        uint32_t imageCnt = swapChainSupport.capabilities.minImageCount + 1;
+        // imageCnt > ..maxImageCount > 0
+        if(swapChainSupport.capabilities.maxImageCount > 0
+            && imageCnt > swapChainSupport.capabilities.maxImageCount)
+            imageCnt = swapChainSupport.capabilities.maxImageCount;
+        
+        VkSwapchainCreateInfoKHR createInfo = {
+            .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+            .surface = surface_,
+
+            .minImageCount = imageCnt,
+            .imageFormat = surfaceFormat.format,
+            .imageColorSpace = surfaceFormat.colorSpace,
+            .imageExtent = extent,
+            .imageArrayLayers = 1,
+            .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT // color buffer?
+        };
+
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice_);
+        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+        if(indices.graphicsFamily != indices.presentFamily) {
+            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            createInfo.queueFamilyIndexCount = 2;
+            createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        } else // graphicsFamily == presentFamily
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        createInfo.presentMode = presentMode;
+        createInfo.clipped = VK_TRUE;
+
+        createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+        if(vkCreateSwapchainKHR(device_, &createInfo, nullptr, &swapChain_) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create swapchain");
+        
+        vkGetSwapchainImagesKHR(device_, swapChain_, &imageCnt, nullptr);
+        swapChainImages_.resize(imageCnt);
+        vkGetSwapchainImagesKHR(device_, swapChain_, &imageCnt, swapChainImages_.data());
+
+        swapChainImageFormat_ = surfaceFormat.format;
+        swapChainExtent_ = extent;
+    }
+
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> & availableFormats) noexcept {
+        for(const auto & format : availableFormats) {
+            if(format.format == VK_FORMAT_B8G8R8A8_SRGB
+                && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                return format;
+        }
+
+        return availableFormats.front();
+    }
+
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> & availablePresentModes) noexcept {
+        for(const auto & presentMode : availablePresentModes) {
+            if(presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+                return presentMode;
+        }
+
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR & capabilities) noexcept {
+        if(capabilities.currentExtent.width != UINT32_MAX)
+            return capabilities.currentExtent;
+        
+        int width, height;
+        glfwGetFramebufferSize(window_, &width, &height);
+
+        VkExtent2D actualExtent = {
+            static_cast<uint32_t>(width), static_cast<uint32_t>(height)
+        };
+
+        actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
+        actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+
+        return actualExtent;
+    }
+
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice _device) noexcept {
+        SwapChainSupportDetails details;
+
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_device, surface_, &details.capabilities);
+
+        uint32_t formatCnt;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(_device, surface_, &formatCnt, nullptr);
+
+        if(formatCnt != 0) {
+            details.formats.resize(formatCnt);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(_device, surface_, &formatCnt, details.formats.data());
+        }
+
+        uint32_t presentModeCnt;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(_device, surface_, &presentModeCnt, nullptr);
+
+        if(presentModeCnt != 0) {
+            details.presentModes.resize(presentModeCnt);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(_device, surface_, &presentModeCnt, details.presentModes.data());
+        }
+
+        return details;
+    }
+
     bool isDeviceSuitable(VkPhysicalDevice _device) noexcept {
         QueueFamilyIndices indices = findQueueFamilies(_device);
 
-        return indices.isComplete();
+        bool extensionsSupported = checkDeviceExtensionSupport(_device);
+
+        bool swapChainAdequate = false;
+        if(extensionsSupported) {
+            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(_device);
+            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+        }
+
+        return indices.isComplete() && extensionsSupported && swapChainAdequate;
+    }
+
+    bool checkDeviceExtensionSupport(VkPhysicalDevice _device) noexcept {
+        uint32_t extensionCnt;
+        vkEnumerateDeviceExtensionProperties(_device, nullptr, &extensionCnt, nullptr);
+
+        std::vector<VkExtensionProperties> availableExts(extensionCnt);
+        vkEnumerateDeviceExtensionProperties(_device, nullptr, &extensionCnt, availableExts.data());
+
+        std::set<std::string> requiredExtensions(__deviceExts.begin(), __deviceExts.end());
+
+        for(const auto & ext : availableExts)
+            requiredExtensions.erase(ext.extensionName);
+            
+        return requiredExtensions.empty();
     }
 
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice _device) noexcept {
