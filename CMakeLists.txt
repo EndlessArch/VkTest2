@@ -20,4 +20,4 @@ add_executable(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIR} ${GLFW_INCLUDE_DIR} ${GLEW_INCLUDE_DIR})
 target_link_libraries(${PROJECT_NAME} PUBLIC ${Vulkan_LIBRARIES} ${GLFW_LIBRARIES} ${GLEW_LIBRARIES})
 
-message(${GLFW_LIBRARIES})
+message(${Vulkan_INCLUDE_DIR})
