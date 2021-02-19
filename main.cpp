@@ -56,7 +56,7 @@ public:
     }
 
 private:
-    GLFWwindow * window;
+    GLFWwindow * window_;
     int width_, height_;
     std::string title_;
 
@@ -74,7 +74,7 @@ private:
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-        window = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
+        window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
     }
 
     void initVulkan() {
@@ -86,7 +86,7 @@ private:
     }
 
     void mainLoop() {
-        while(!glfwWindowShouldClose(window)) {
+        while(!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
         }
     }
@@ -98,7 +98,7 @@ private:
 
         vkDestroyInstance(instance_, nullptr);
 
-        glfwDestroyWindow(window);
+        glfwDestroyWindow(window_);
         glfwTerminate();
     }
 
