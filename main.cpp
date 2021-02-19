@@ -67,6 +67,9 @@ private:
 #endif
 
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
+    VkDevice device_;
+
+    VkQueue graphicsQueue_;
 
     void initWindow() {
         glfwInit();
@@ -83,6 +86,7 @@ private:
         setupDebugMessenger();
 #endif
         pickPhysicalDevice();
+        createLogicalDevice();
     }
 
     void mainLoop() {
@@ -92,6 +96,7 @@ private:
     }
 
     void cleanup() {
+        vkDestroyDevice(device_, nullptr);
 #ifndef NDEBUG
         DestroyDebugUtilsMessengerEXT(instance_, dbgMessenger_, nullptr);
 #endif
@@ -196,6 +201,44 @@ private:
             throw std::runtime_error("Failed to find a suitable GPU device");
 
         return;
+    }
+
+    void createLogicalDevice() {
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice_);
+
+        VkDeviceQueueCreateInfo queueCreateInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+
+            .queueFamilyIndex = indices.graphicsFamily.value(),
+            .queueCount = 1
+        };
+
+        float queuePriority = 1.0F;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+
+        VkPhysicalDeviceFeatures deviceFeatures {};
+
+        VkDeviceCreateInfo deviceCreateInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+
+            .pQueueCreateInfos = &queueCreateInfo,
+            .queueCreateInfoCount = 1,
+
+            .pEnabledFeatures = &deviceFeatures,
+            .enabledExtensionCount = 0
+        };
+
+#ifndef NDEBUG
+        deviceCreateInfo.enabledLayerCount = __validationLyrs.size();
+        deviceCreateInfo.ppEnabledLayerNames = __validationLyrs.data();
+#else
+        deviceCreateInfo.enabledLayerCount = 0;
+#endif
+
+        if(vkCreateDevice(physicalDevice_, &deviceCreateInfo, nullptr, &device_) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create logical device");
+        
+        vkGetDeviceQueue(device_, indices.graphicsFamily.value(), 0, &graphicsQueue_);
     }
 
     bool isDeviceSuitable(VkPhysicalDevice _device) noexcept {
