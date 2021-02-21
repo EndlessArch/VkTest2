@@ -96,6 +96,7 @@ private:
 
     VkRenderPass renderPass_;
     VkPipelineLayout pipelineLayout_;
+    VkPipeline graphicsPipeline_;
 
     void initWindow() {
         glfwInit();
@@ -127,6 +128,7 @@ private:
     }
 
     void cleanup() {
+        vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
 
@@ -440,7 +442,7 @@ private:
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            .primitiveRestartEnable = VK_TRUE
+            .primitiveRestartEnable = VK_FALSE
         };
 
         VkViewport viewport = {
@@ -505,6 +507,25 @@ private:
         if(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS)
             throw std::runtime_error("Failed to create pipeline layout");
         
+        VkGraphicsPipelineCreateInfo pipelineInfo = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .stageCount = std::extent_v<decltype(shaderStages)>,
+            .pStages = shaderStages,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssembly,
+            .pViewportState = &viewportState,
+            .pRasterizationState = &rasterizer,
+            .pMultisampleState = &multiSampling,
+            .pColorBlendState = &colorBlending,
+            .layout = pipelineLayout_,
+            .renderPass = renderPass_,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE
+        };
+
+        if(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline_) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create graphics pipeline");
+
         vkDestroyShaderModule(device_, fragShaderMod, nullptr);
         vkDestroyShaderModule(device_, vertShaderMod, nullptr);
     }
