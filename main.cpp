@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <set>
@@ -201,6 +202,7 @@ private:
         };
     }
 
+#ifndef NDEBUG
     void setupDebugMessenger() {
         VkDebugUtilsMessengerCreateInfoEXT createInfo;
         populateDebugMessengerCreateInfo(createInfo);
@@ -210,6 +212,7 @@ private:
 
         return;
     }
+#endif
 
     void createSurface() {
         if(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_) != VK_SUCCESS)
@@ -364,7 +367,44 @@ private:
     }
 
     void createGraphicsPipeline() {
+        // though using vulkan1.2, compiling SPIR-V code as vulkan1.1 has no any issue
+        // glslc -w -x glsl --target-env=vulkan1.1 -O (filename).(frag/vert) -o (filename).spv
+        auto fragShaderCode = readFile("frag.spv");
+        auto vertShaderCode = readFile("vert.spv");
+
+        VkShaderModule fragShaderMod = createShaderModule(fragShaderCode);
+        VkShaderModule vertShaderMod = createShaderModule(vertShaderCode);
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = fragShaderMod,
+            .pName = "main"
+        }, vertShaderStageInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vertShaderMod,
+            .pName = "main"
+        };
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = { fragShaderStageInfo, vertShaderStageInfo };
         
+        vkDestroyShaderModule(device_, fragShaderMod, nullptr);
+        vkDestroyShaderModule(device_, vertShaderMod, nullptr);
+    }
+
+    VkShaderModule createShaderModule(const std::vector<char> & code) {
+        VkShaderModuleCreateInfo createInfo = {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = code.size(), // * sizeof(uint32_t), // idk why not
+            .pCode = reinterpret_cast<const uint32_t *>(code.data())
+        };
+
+        VkShaderModule shaderModule;
+        if(vkCreateShaderModule(device_, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create shader module");
+        
+        return shaderModule;
     }
 
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> & availableFormats) noexcept {
@@ -519,6 +559,23 @@ private:
         }
         
         return true;
+    }
+
+    static std::vector<char> readFile(const std::string & _filename) {
+        std::ifstream file(_filename, std::ios::ate | std::ios::binary);
+
+        if(!file.is_open())
+            throw std::runtime_error("Failed to open file(\"" + _filename + "\")");
+        
+        std::size_t fileSz = (std::size_t)file.tellg();
+        std::vector<char> buf(fileSz);
+
+        file.seekg(0);
+        file.read(buf.data(), fileSz);
+
+        file.close();
+
+        return buf;
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL _debugCallBack(VkDebugUtilsMessageSeverityFlagBitsEXT _msgSeverity,
