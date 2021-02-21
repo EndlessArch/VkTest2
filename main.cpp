@@ -94,6 +94,8 @@ private:
     VkExtent2D swapChainExtent_;
     std::vector<VkImageView> swapChainImageViews_;
 
+    VkPipelineLayout pipelineLayout_;
+
     void initWindow() {
         glfwInit();
 
@@ -123,6 +125,8 @@ private:
     }
 
     void cleanup() {
+        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+
         for(auto imgView : swapChainImageViews_)
             vkDestroyImageView(device_, imgView, nullptr);
 
@@ -388,6 +392,80 @@ private:
         };
 
         VkPipelineShaderStageCreateInfo shaderStages[] = { fragShaderStageInfo, vertShaderStageInfo };
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount = 0,
+            .vertexAttributeDescriptionCount = 0
+        };
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .primitiveRestartEnable = VK_TRUE
+        };
+
+        VkViewport viewport = {
+            .x = 0.0F,
+            .y = 0.0F,
+            .width = (float)swapChainExtent_.width,
+            .height = (float)swapChainExtent_.height,
+            .minDepth = 0.0F,
+            .maxDepth = 1.0F
+        };
+
+        VkRect2D scissor = {
+            .offset = { 0, 0 },
+            .extent = swapChainExtent_
+        };
+
+        VkPipelineViewportStateCreateInfo viewportState = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .pViewports = &viewport,
+            .scissorCount = 1,
+            .pScissors = &scissor
+        };
+
+        VkPipelineRasterizationStateCreateInfo rasterizer = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .depthClampEnable = VK_FALSE,
+            .rasterizerDiscardEnable = VK_FALSE,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.0F,
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .frontFace = VK_FRONT_FACE_CLOCKWISE,
+            .depthBiasEnable = VK_FALSE
+        };
+
+        VkPipelineMultisampleStateCreateInfo multiSampling = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .sampleShadingEnable = VK_FALSE,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
+        };
+
+        VkPipelineColorBlendAttachmentState colorBlendAttachment = {
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+            .blendEnable = VK_FALSE
+        };
+
+        VkPipelineColorBlendStateCreateInfo colorBlending = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .logicOpEnable = VK_FALSE,
+            .logicOp = VK_LOGIC_OP_COPY,
+            .attachmentCount = 1,
+            .pAttachments = &colorBlendAttachment,
+            .blendConstants = { 0.0F, 0.0F, 0.0F, 0.0F }
+        };
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .setLayoutCount = 0,
+            .pushConstantRangeCount = 0
+        };
+
+        if(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create pipeline layout");
         
         vkDestroyShaderModule(device_, fragShaderMod, nullptr);
         vkDestroyShaderModule(device_, vertShaderMod, nullptr);
